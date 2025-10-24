@@ -262,6 +262,73 @@ class So100DataConfig(BaseDataConfig):
 ###########################################################################################
 
 
+class LeSandwichDataConfig(BaseDataConfig):
+    video_keys = ["video.gripper_cam", "video.front_cam"]
+    state_keys = ["state.single_arm", "state.gripper"]
+    action_keys = ["action.single_arm", "action.gripper"]
+    language_keys = ["annotation.human.task_description"]
+    observation_indices = [0]
+    action_indices = list(range(16))
+
+    def transform(self) -> ModalityTransform:
+        transforms = [
+            # video transforms
+            VideoToTensor(apply_to=self.video_keys),
+            VideoCrop(apply_to=self.video_keys, scale=0.95),
+            VideoResize(apply_to=self.video_keys, height=224, width=224, interpolation="linear"),
+            VideoColorJitter(
+                apply_to=self.video_keys,
+                brightness=0.3,
+                contrast=0.4,
+                saturation=0.5,
+                hue=0.08,
+            ),
+            VideoToNumpy(apply_to=self.video_keys),
+            # state transforms
+            StateActionToTensor(apply_to=self.state_keys),
+            StateActionTransform(
+                apply_to=self.state_keys,
+                normalization_modes={key: "min_max" for key in self.state_keys},
+            ),
+            # action transforms
+            StateActionToTensor(apply_to=self.action_keys),
+            StateActionTransform(
+                apply_to=self.action_keys,
+                normalization_modes={key: "min_max" for key in self.action_keys},
+            ),
+            # concat transforms
+            ConcatTransform(
+                video_concat_order=self.video_keys,
+                state_concat_order=self.state_keys,
+                action_concat_order=self.action_keys,
+            ),
+            # model-specific transform
+            GR00TTransform(
+                state_horizon=len(self.observation_indices),
+                action_horizon=len(self.action_indices),
+                max_state_dim=64,
+                max_action_dim=32,
+            ),
+        ]
+        return ComposedModalityTransform(transforms=transforms)
+    
+    @classmethod
+    def modified_fps_config(cls, fps: int, action_horizon: int = 16):
+        obj = cls()
+        if fps == 60:
+            action_indices = list(range(action_horizon))
+            obj.action_indices = action_indices
+        else:
+            assert 60 % fps == 0, "New FPS must be divisible by 60"
+            skip_frames = 60 // fps
+            action_indices = list(range(skip_frames-1, action_horizon*skip_frames+1, skip_frames))
+            obj.action_indices = action_indices
+        
+        return obj
+
+###########################################################################################
+
+
 class So100DualCamDataConfig(So100DataConfig):
     video_keys = ["video.front", "video.wrist"]
     state_keys = ["state.single_arm", "state.gripper"]
@@ -785,4 +852,8 @@ DATA_CONFIG_MAP = {
     "unitree_g1_full_body": UnitreeG1FullBodyDataConfig(),
     "oxe_droid": OxeDroidDataConfig(),
     "agibot_genie1": AgibotGenie1DataConfig(),
+    "lesandwich_60_fps": LeSandwichDataConfig.modified_fps_config(fps=60),
+    "lesandwich_30_fps": LeSandwichDataConfig.modified_fps_config(fps=30),
+    "lesandwich_20_fps": LeSandwichDataConfig.modified_fps_config(fps=20),
+    "lesandwich_10_fps": LeSandwichDataConfig.modified_fps_config(fps=10),    
 }
