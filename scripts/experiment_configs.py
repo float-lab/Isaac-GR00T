@@ -3,6 +3,16 @@ from typing import List, Literal
 
 from gr00t.model.transforms import EMBODIMENT_TAG_MAPPING
 
+"""
+python scripts/gr00t_finetune.py lesandwich_30fps \
+    --batch-size=32 \
+    --max-steps 20000 \
+    --output-dir /volume/models/groot/h100-30fps-full-ft-v2 \
+    --tune-visual --tune-projector --tune-diffusion-model \
+    --dataset-path /workspace/lerobot/float-lab/lesandwich2-groot \
+    --dataloader-num-workers 4
+"""
+
 @dataclass
 class ArgsConfig:
     """Configuration for GR00T model fine-tuning."""

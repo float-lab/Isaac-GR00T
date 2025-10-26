@@ -1,5 +1,8 @@
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import DEFAULT_FEATURES
+from lerobot.datasets.utils import (
+    DEFAULT_FEATURES,
+    write_json,
+)
 
 from tqdm import tqdm
 from argparse import ArgumentParser
@@ -10,14 +13,27 @@ import numpy as np
 
 RECORDED_DATASETS = [
     "markmau2/bread1",
+    "markmau2/bread1.3",
+    "markmau2/petty2.1",
     "markmau2/petty1",
+    "markmau2/bread2.1",
     "markmau2/bread2",
 ]
+
+DATASET_TYPE = {
+    "markmau2/bread1": "bread1",
+    "markmau2/bread1.3": "bread1",
+    "markmau2/petty2.1": "patty1",
+    "markmau2/petty1": "patty1",
+    "markmau2/bread2.1": "bread2",
+    "markmau2/bread2": "bread2",
+}
 
 SKIP_EPISODES = {
     "markmau2/bread1": [],
     "markmau2/petty1": [17],
     "markmau2/bread2": [15],
+    "markmau2/petty2.1": [14],
 }
 
 CAMERA_KEYS = [
@@ -39,9 +55,15 @@ TASK_INDEX = {
     "bread2": 2,
 }
 
-def get_all_recorded_datasets():
+def get_all_recorded_datasets(datasets_to_select: list[str] | None = None):
     datasets = {}
-    for repo_id in RECORDED_DATASETS:
+    if datasets_to_select is None:
+        datasets_to_select = RECORDED_DATASETS
+    else:
+        assert set(datasets_to_select).intersection(set(RECORDED_DATASETS)) == set(datasets_to_select)
+
+    print(f"Combining datasets: {datasets_to_select}")
+    for repo_id in datasets_to_select:
         datasets[repo_id] = LeRobotDataset(repo_id=repo_id)
     
     return datasets
@@ -64,8 +86,8 @@ def _apply_image_transforms(frame, tx = transforms.ToPILImage()):
 
 
 def copy_and_transform(func):
-    def wrap(frame):
-        frame = func(frame)
+    def wrap(frame, ds_version):
+        frame = func(frame, ds_version)
         new_frame = _copy_frame_essentials(frame)
         new_frame = _apply_image_transforms(new_frame)
         return new_frame
@@ -74,30 +96,39 @@ def copy_and_transform(func):
 
 
 @copy_and_transform
-def clean_bread1_dataset(frame: dict):
-    if frame["episode_index"].item() in [34, 33, 32, 31, 30]:
-        frame["task"] = TASKS["patty1"]
-        frame["task_index"] = torch.tensor(TASK_INDEX["patty1"])
-    else:
+def clean_bread1_dataset(frame: dict, ds_version: str="bread1"):
+    if ds_version == "bread1":
+        if frame["episode_index"].item() in [34, 33, 32, 31, 30]:
+            frame["task"] = TASKS["patty1"]
+            frame["task_index"] = torch.tensor(TASK_INDEX["patty1"])
+        else:
+            frame["task"] = TASKS["bread1"]
+            frame["task_index"] = torch.tensor(TASK_INDEX["bread1"])
+    
+    elif ds_version == "bread1.3":
         frame["task"] = TASKS["bread1"]
         frame["task_index"] = torch.tensor(TASK_INDEX["bread1"])
-    
+
     return frame
 
 
 @copy_and_transform
-def clean_bread2_dataset(frame: dict):
-    frame["task"] = TASKS["bread2"]
-    frame["task_index"] = torch.tensor(TASK_INDEX["bread2"])
+def clean_bread2_dataset(frame: dict, ds_version="bread2"):
+    if ds_version == "bread2":
+        frame["task"] = TASKS["bread2"]
+        frame["task_index"] = torch.tensor(TASK_INDEX["bread2"])
 
-    if frame["episode_index"].item() > 15:
-        frame["observation.state"][1] -= 2 * np.pi
-        frame["observation.state"][4] -= 2 * np.pi 
+        if frame["episode_index"].item() > 15:
+            frame["observation.state"][1] -= 2 * np.pi
+            frame["observation.state"][4] -= 2 * np.pi 
+    elif ds_version == "bread2.1":
+        frame["task"] = TASKS["bread2"]
+        frame["task_index"] = torch.tensor(TASK_INDEX["bread2"])
     return frame
 
 
 @copy_and_transform
-def clean_petty1_dataset(frame: dict):
+def clean_petty1_dataset(frame: dict, ds_version="patty1"):
     frame["task"] = TASKS["patty1"]
     frame["task_index"] = torch.tensor(TASK_INDEX["patty1"])
 
@@ -105,9 +136,9 @@ def clean_petty1_dataset(frame: dict):
 
 
 DATASET_PROCESS_FUNC = {
-    "markmau2/bread1": clean_bread1_dataset,
-    "markmau2/petty1": clean_petty1_dataset,
-    "markmau2/bread2": clean_bread2_dataset,
+    "bread1": clean_bread1_dataset,
+    "patty1": clean_petty1_dataset,
+    "bread2": clean_bread2_dataset,
 }
 
 DATASET_SCHEMA = {
@@ -155,6 +186,7 @@ DATASET_SCHEMA = {
             'video.codec': 'avc1',
             'video.pix_fmt': 'yuv420p',
             'video.is_depth_map': False,
+            'video.channels': 3,
             'has_audio': False
         }
     },
@@ -167,9 +199,49 @@ DATASET_SCHEMA = {
             'video.codec': 'avc1',
             'video.pix_fmt': 'yuv420p',
             'video.is_depth_map': False,
+            'video.channels': 3,
             'has_audio': False
         }
     },
+}
+
+
+MODALITY_PATH = "meta/modality.json"
+
+SO101_MODALITY = {
+    "state": {
+        "single_arm": {
+          "start": 0,
+          "end": 5
+        },
+        "gripper": {
+          "start": 5,
+          "end": 6
+        }
+    },
+    "action": {
+        "single_arm": {
+          "start": 0,
+          "end": 5
+        },
+        "gripper": {
+          "start": 5,
+          "end": 6
+        }
+    },
+    "video": {
+        "gripper_cam": {
+            "original_key": "observation.images.main"
+        },
+        "front_cam": {
+            "original_key": "observation.images.secondary_0"
+        }
+    },
+    "annotation": {
+        "human.task_description": {
+            "original_key": "task_index"
+        }
+    }
 }
 
 
@@ -212,7 +284,9 @@ def clean_and_combine(
     for ds_name, ds in datasets.items():
         print(f"Processing {ds_name}")
 
-        process_func = DATASET_PROCESS_FUNC[ds_name]
+        ds_type = DATASET_TYPE[ds_name]
+        ds_version = ds_name.split("/")[-1]
+        process_func = DATASET_PROCESS_FUNC[ds_type]
         last_episode_idx = None
         test_episode_index = None
 
@@ -225,7 +299,7 @@ def clean_and_combine(
             if (limit is not None) and (i > limit):
                 break
             current_episode_idx = frame["episode_index"].item()
-            if current_episode_idx in SKIP_EPISODES[ds_name]:
+            if current_episode_idx in SKIP_EPISODES.get(ds_name, []):
                 continue
 
             if last_episode_idx is not None and current_episode_idx != last_episode_idx:
@@ -239,7 +313,7 @@ def clean_and_combine(
             
             assert current_dataset is not None, "Cannot assign a dataset to the episode index"
             last_episode_idx = current_episode_idx
-            new_frame = process_func(frame)
+            new_frame = process_func(frame, ds_version)
             current_dataset.add_frame(new_frame, task=frame["task"], timestamp=frame["timestamp"])
         
         assert current_dataset is not None, "Cannot assign a dataset to the episode index"
@@ -258,9 +332,10 @@ def main():
     parser.add_argument("--upload", "-u", action="store_true", default=False)
     parser.add_argument("--limit", "-l", type=int, default=None)
     parser.add_argument("--train-test-split", "-t", action="store_true")
+    parser.add_argument("--datasets", "-d", nargs="+", type=str, default=RECORDED_DATASETS)
     args = parser.parse_args()
 
-    datasets = get_all_recorded_datasets()
+    datasets = get_all_recorded_datasets(args.datasets)
     merged_clean_dataset = clean_and_combine(
         datasets, args.new_repo_id, args.limit, args.train_test_split
     )
@@ -269,6 +344,7 @@ def main():
         for ds_split in merged_clean_dataset:
             if merged_clean_dataset[ds_split] is None:
                 continue
+            write_json(SO101_MODALITY, merged_clean_dataset[ds_split].root / MODALITY_PATH)
             merged_clean_dataset[ds_split].push_to_hub()
 
 if __name__ == "__main__":

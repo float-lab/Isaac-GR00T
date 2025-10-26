@@ -20,56 +20,24 @@ MODALITY_PATH = "meta/modality.json"
 
 SO101_MODALITY = {
     "state": {
-        "motor_1": {
-            "start": 0,
-            "end": 1,
+        "single_arm": {
+          "start": 0,
+          "end": 5
         },
-        "motor_2": {
-            "start": 1,
-            "end": 2,
-        },
-        "motor_3": {
-            "start": 2,
-            "end": 3,
-        },
-        "motor_4": {
-            "start": 3,
-            "end": 4,
-        },
-        "motor_5": {
-            "start": 4,
-            "end": 5,
-        },
-        "motor_6": {
-            "start": 5,
-            "end": 6,
-        },
+        "gripper": {
+          "start": 5,
+          "end": 6
+        }
     },
     "action": {
-        "motor_1": {
-            "start": 0,
-            "end": 1,
+        "single_arm": {
+          "start": 0,
+          "end": 5
         },
-        "motor_2": {
-            "start": 1,
-            "end": 2,
-        },
-        "motor_3": {
-            "start": 2,
-            "end": 3,
-        },
-        "motor_4": {
-            "start": 3,
-            "end": 4,
-        },
-        "motor_5": {
-            "start": 4,
-            "end": 5,
-        },
-        "motor_6": {
-            "start": 5,
-            "end": 6,
-        },
+        "gripper": {
+          "start": 5,
+          "end": 6
+        }
     },
     "video": {
         "gripper_cam": {
@@ -77,7 +45,12 @@ SO101_MODALITY = {
         },
         "front_cam": {
             "original_key": "observation.images.secondary_0"
-        },
+        }
+    },
+    "annotation": {
+        "human.task_description": {
+            "original_key": "task_index"
+        }
     }
 }
 
